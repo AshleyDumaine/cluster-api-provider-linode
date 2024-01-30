@@ -115,7 +115,6 @@ func main() {
 	}
 	if err = (&controller2.LinodeMachineReconciler{
 		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
 		Recorder:         mgr.GetEventRecorderFor("LinodeMachineReconciler"),
 		WatchFilterValue: machineWatchFilter,
 		LinodeApiKey:     linodeToken,

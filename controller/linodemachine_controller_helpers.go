@@ -17,14 +17,10 @@ limitations under the License.
 package controller
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
-
 	"github.com/go-logr/logr"
 	infrav1 "github.com/linode/cluster-api-provider-linode/api/v1alpha1"
 	"github.com/linode/cluster-api-provider-linode/util/reconciler"
-	"github.com/linode/linodego"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	kutil "sigs.k8s.io/cluster-api/util"
@@ -130,22 +126,4 @@ func (r *LinodeMachineReconciler) requestsForCluster(ctx context.Context, namesp
 	}
 
 	return result, nil
-}
-
-func linodeMachineSpecToCreateInstanceConfig(machineSpec infrav1.LinodeMachineSpec) *linodego.InstanceCreateOptions {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(machineSpec)
-	if err != nil {
-		return nil
-	}
-
-	var createConfig linodego.InstanceCreateOptions
-	dec := gob.NewDecoder(&buf)
-	err = dec.Decode(&createConfig)
-	if err != nil {
-		return nil
-	}
-
-	return &createConfig
 }
