@@ -291,6 +291,7 @@ func (*LinodeMachineReconciler) reconcileCreate(ctx context.Context, machineScop
 		}
 		createConfig.Tags = tags
 		createConfig.SwapSize = util.Pointer(0)
+		createConfig.PrivateIP = true
 
 		// get the bootstrap data for the Linode instance and set it for create config
 		bootstrapData, err := machineScope.GetBootstrapData(ctx)
