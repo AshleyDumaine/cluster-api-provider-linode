@@ -36,6 +36,24 @@ spec:
       apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
       name: ${CLUSTER_NAME}-control-plane
   kubeadmConfigSpec:
+    files:
+      - path: /kubeadm-init.sh
+        content: |
+          #!/bin/bash
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -y
+          apt-get install -y apt-transport-https ca-certificates curl gpg
+          mkdir -p -m 755 /etc/apt/keyrings
+          K8S_VERSION=$1
+          K8S_MINOR_VERSION=${K8S_VERSION%.*}
+          curl -fsSL https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR_VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+          apt-get update
+          apt-get install -y kubelet kubeadm kubectl containerd
+          apt-mark hold kubelet kubeadm kubectl containerd
+        permissions: "0777"
+    preKubeadmCommands:
+      - /kubeadm-init.sh ${KUBERNETES_VERSION}
     clusterConfiguration:
       apiServer:
         extraArgs:
