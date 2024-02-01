@@ -41,33 +41,43 @@ spec:
         content: |
           #!/bin/bash
           export DEBIAN_FRONTEND=noninteractive
+
+          HOSTNAME=$1
+          K8S_VERSION=$2
+          K8S_MINOR_VERSION=${K8S_VERSION%.*}
+          
+          hostnamectl set-hostname "$HOSTNAME" && hostname -F /etc/hostname
+          
           apt-get update -y
           apt-get install -y apt-transport-https ca-certificates curl gpg
+          
           mkdir -p -m 755 /etc/apt/keyrings
-          K8S_VERSION=$1
-          K8S_MINOR_VERSION=${K8S_VERSION%.*}
-          curl -fsSL https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg -f
+          curl -fsSL https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR_VERSION}/deb/Release.key | gpg --yes --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
           echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR_VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
-          apt-get update
-          apt-get install -y kubelet kubeadm kubectl containerd
+          apt-get update --allow-insecure-repositories
+          apt-get install -y kubelet kubeadm kubectl containerd --allow-unauthenticated
           apt-mark hold kubelet kubeadm kubectl containerd
+          
           cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
           overlay
           br_netfilter
           EOF
+          
           modprobe overlay
           modprobe br_netfilter
+          
           # sysctl params required by setup, params persist across reboots
           cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
           net.bridge.bridge-nf-call-iptables  = 1
           net.bridge.bridge-nf-call-ip6tables = 1
           net.ipv4.ip_forward                 = 1
           EOF
+          
           # Apply sysctl params without reboot
           sysctl --system
         permissions: "0777"
     preKubeadmCommands:
-      - /kubeadm-init.sh ${KUBERNETES_VERSION}
+      - /kubeadm-init.sh '{{ ds.meta_data.label }}' ${KUBERNETES_VERSION}
     clusterConfiguration:
       apiServer:
         extraArgs:
@@ -78,11 +88,13 @@ spec:
         kubeletExtraArgs:
           cloud-provider: external
           provider-id: 'linode:///{{ ds.meta_data.region }}/{{ ds.meta_data.id }}'
+        name: '{{ ds.meta_data.label }}'
     joinConfiguration:
       nodeRegistration:
         kubeletExtraArgs:
           cloud-provider: external
           provider-id: 'linode:///{{ ds.meta_data.region }}/{{ ds.meta_data.id }}'
+        name: '{{ ds.meta_data.label }}'
   version: "${KUBERNETES_VERSION}"
 ---
 kind: LinodeMachineTemplate
@@ -148,3 +160,4 @@ spec:
           kubeletExtraArgs:
             cloud-provider: external
             provider-id: 'linode:///{{ ds.meta_data.region }}/{{ ds.meta_data.id }}'
+          name: '{{ ds.meta_data.label }}'
