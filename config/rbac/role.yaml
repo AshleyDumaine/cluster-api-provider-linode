@@ -10,8 +10,19 @@ rules:
   - events
   verbs:
   - create
+  - get
+  - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - cluster.x-k8s.io
   resources:
@@ -76,6 +87,32 @@ rules:
   - infrastructure.cluster.x-k8s.io
   resources:
   - linodemachines/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - infrastructure.cluster.x-k8s.io
+  resources:
+  - linodevpcs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - infrastructure.cluster.x-k8s.io
+  resources:
+  - linodevpcs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - infrastructure.cluster.x-k8s.io
+  resources:
+  - linodevpcs/status
   verbs:
   - get
   - patch
