@@ -272,6 +272,11 @@ spec:
                   - type
                   type: object
                 type: array
+              etcdVolumeID:
+                description: |-
+                  EtcdVolumeID contains the ID for the Linode volume associated the node
+                  (control plane nodes only)
+                type: integer
               failureMessage:
                 description: |-
                   FailureMessage will be set in the event that there is a terminal problem

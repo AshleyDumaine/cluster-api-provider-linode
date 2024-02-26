@@ -317,7 +317,7 @@ func (r *LinodeMachineReconciler) reconcileCreate(
 		linodeInstance = &linodeInstances[0]
 	case 0:
 		// get the bootstrap data for the Linode instance and set it for create config
-		createConfig, err := r.newCreateConfig(ctx, machineScope, tags, logger)
+		createOpts, err := r.newCreateConfig(ctx, machineScope, tags, logger)
 		if err != nil {
 			logger.Error(err, "Failed to create Linode machine create config")
 
@@ -325,22 +325,33 @@ func (r *LinodeMachineReconciler) reconcileCreate(
 		}
 
 		if machineScope.LinodeCluster.Spec.VPCRef != nil {
-			iface, err := r.getVPCInterfaceConfig(ctx, machineScope, createConfig.Interfaces, logger)
+			iface, err := r.getVPCInterfaceConfig(ctx, machineScope, createOpts.Interfaces, logger)
 			if err != nil {
 				logger.Error(err, "Failed to get VPC interface config")
 
 				return nil, err
 			}
 
-			createConfig.Interfaces = append(createConfig.Interfaces, *iface)
+			createOpts.Interfaces = append(createOpts.Interfaces, *iface)
 		}
 
-		linodeInstance, err = machineScope.LinodeClient.CreateInstance(ctx, *createConfig)
+		linodeInstance, err = machineScope.LinodeClient.CreateInstance(ctx, *createOpts)
 		if err != nil {
 			logger.Error(err, "Failed to create Linode machine instance")
 
 			return nil, err
 		}
+
+		volume, err := services.CreateEtcdVolume(ctx, linodeInstance.ID, logger, machineScope)
+		if err != nil {
+			logger.Error(err, "Failed to create etcd volume")
+
+			return nil, err
+		}
+		if volume != nil {
+			machineScope.LinodeMachine.Status.EtcdVolumeID = volume.ID
+		}
+
 	default:
 		err = errors.New("multiple instances")
 
@@ -451,14 +462,19 @@ func (r *LinodeMachineReconciler) reconcileDelete(
 		return nil
 	}
 
-	err := services.DeleteNodeFromNB(ctx, logger, machineScope)
-	if err != nil {
+	if err := services.DeleteNodeFromNB(ctx, logger, machineScope); err != nil {
 		logger.Error(err, "Failed to remove node from Node Balancer backend")
 
 		return err
 	}
-	err = machineScope.LinodeClient.DeleteInstance(ctx, *machineScope.LinodeMachine.Spec.InstanceID)
-	if err != nil {
+
+	if err := services.DeleteEtcdVolume(ctx, logger, machineScope); err != nil {
+		logger.Error(err, "Failed to delete etcd volume")
+
+		return err
+	}
+
+	if err := machineScope.LinodeClient.DeleteInstance(ctx, *machineScope.LinodeMachine.Spec.InstanceID); err != nil {
 		if util.IgnoreLinodeAPIError(err, http.StatusNotFound) != nil {
 			logger.Error(err, "Failed to delete Linode machine instance")
 
