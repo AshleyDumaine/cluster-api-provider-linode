@@ -342,14 +342,13 @@ func (r *LinodeMachineReconciler) reconcileCreate(
 			return nil, err
 		}
 
-		volume, err := services.CreateEtcdVolume(ctx, linodeInstance.ID, logger, machineScope)
-		if err != nil {
-			logger.Error(err, "Failed to create etcd volume")
+		// create etcd disk only if this is a control plane node
+		if kutil.IsControlPlaneMachine(machineScope.Machine) {
+			if err = r.configureDisks(ctx, logger, machineScope, linodeInstance.ID); err != nil {
+				logger.Error(err, "Failed to configure instance disks")
 
-			return nil, err
-		}
-		if volume != nil {
-			machineScope.LinodeMachine.Status.EtcdVolumeID = volume.ID
+				return nil, err
+			}
 		}
 
 	default:
@@ -387,6 +386,67 @@ func (r *LinodeMachineReconciler) reconcileCreate(
 	}
 
 	return linodeInstance, nil
+}
+
+func (r *LinodeMachineReconciler) configureDisks(
+	ctx context.Context,
+	logger logr.Logger,
+	machineScope *scope.MachineScope,
+	linodeInstanceID int,
+) error {
+	// get the default instance config
+	configs, err := machineScope.LinodeClient.ListInstanceConfigs(ctx, linodeInstanceID, &linodego.ListOptions{})
+	if err != nil || len(configs) == 0 {
+		logger.Error(err, "Failed to list instance configs")
+
+		return err
+	}
+	instanceConfig := configs[0]
+
+	// carve out half the root disk space to be used for the etcd disk
+	rootDiskID := instanceConfig.Devices.SDA.DiskID
+	rootDisk, err := machineScope.LinodeClient.GetInstanceDisk(ctx, linodeInstanceID, rootDiskID)
+	if err != nil {
+		logger.Error(err, "Failed to get root disk for instance")
+
+		return err
+	}
+	//nolint:gomnd // cutting disk in half
+	diskSize := rootDisk.Size / 2
+	if err = machineScope.LinodeClient.ResizeInstanceDisk(ctx, linodeInstanceID, rootDiskID, diskSize); err != nil {
+		logger.Error(err, "Failed to resize root disk")
+
+		return err
+	}
+
+	// create the etcd disk
+	etcdDisk, err := machineScope.LinodeClient.CreateInstanceDisk(
+		ctx,
+		linodeInstanceID,
+		linodego.InstanceDiskCreateOptions{
+			Label:      "etcd-data",
+			Size:       diskSize,
+			Filesystem: string(linodego.FilesystemExt4),
+		},
+	)
+	if err != nil {
+		logger.Error(err, "Failed to create etcd disk")
+
+		return err
+	}
+
+	// attach etcd disk to sdc
+	instanceConfig.Devices.SDC = &linodego.InstanceConfigDevice{DiskID: etcdDisk.ID}
+
+	// finally, boot the machine
+	err = machineScope.LinodeClient.BootInstance(ctx, linodeInstanceID, instanceConfig.ID)
+	if err != nil {
+		logger.Error(err, "Failed to boot instance")
+
+		return err
+	}
+
+	return nil
 }
 
 func (r *LinodeMachineReconciler) reconcileUpdate(
@@ -464,12 +524,6 @@ func (r *LinodeMachineReconciler) reconcileDelete(
 
 	if err := services.DeleteNodeFromNB(ctx, logger, machineScope); err != nil {
 		logger.Error(err, "Failed to remove node from Node Balancer backend")
-
-		return err
-	}
-
-	if err := services.DeleteEtcdVolume(ctx, logger, machineScope); err != nil {
-		logger.Error(err, "Failed to delete etcd volume")
 
 		return err
 	}

@@ -57,6 +57,10 @@ func (*LinodeMachineReconciler) newCreateConfig(ctx context.Context, machineScop
 
 		return nil, err
 	}
+
+	// if the machine is a control plane node, further configuration is needed before it can be booted
+	createConfig.Booted = util.Pointer(!kutil.IsControlPlaneMachine(machineScope.Machine))
+
 	createConfig.PrivateIP = true
 
 	bootstrapData, err := machineScope.GetBootstrapData(ctx)
@@ -87,7 +91,6 @@ func (*LinodeMachineReconciler) newCreateConfig(ctx context.Context, machineScop
 	if createConfig.Image == "" {
 		createConfig.Image = reconciler.DefaultMachineControllerLinodeImage
 	}
-
 	if createConfig.RootPass == "" {
 		createConfig.RootPass = uuid.NewString()
 	}

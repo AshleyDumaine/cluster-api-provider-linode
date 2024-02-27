@@ -115,11 +115,6 @@ type LinodeMachineStatus struct {
 	// Addresses contains the Linode instance associated addresses.
 	Addresses []clusterv1.MachineAddress `json:"addresses,omitempty"`
 
-	// EtcdVolumeID contains the ID for the Linode volume associated the node
-	// (control plane nodes only)
-	// +optional
-	EtcdVolumeID int `json:"etcdVolumeID,omitempty"`
-
 	// InstanceState is the state of the Linode instance for this machine.
 	// +optional
 	InstanceState *linodego.InstanceStatus `json:"instanceState,omitempty"`
